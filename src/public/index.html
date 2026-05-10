@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Lego Builder Viewer</title>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+    />
+    <style>
+      body {
+        margin: 0;
+        background-color: #deebed;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        overflow: hidden;
+        color: #333;
+      }
+      #loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2rem;
+        color: #666;
+        font-weight: bold;
+      }
+      #controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        width: 260px;
+        z-index: 10;
+      }
+      .control-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      label {
+        font-size: 0.85rem;
+        font-weight: bold;
+      }
+      select,
+      input[type="range"] {
+        width: 100%;
+        cursor: pointer;
+      }
+      .check-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+      }
+      /* Controls disabled as per User mandate to restrict functionality to REST context */
+      #controls {
+        display: none !important;
+      }
+      /* Dynamic status overlay styling derived from system reference */
+      #ui-overlay {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        pointer-events: none;
+        font-family: system-ui, sans-serif;
+        color: #2c3e50;
+        z-index: 100;
+        min-width: 240px;
+        border-top: 4px solid #f44336; /* Lego Red thematic accent */
+        transition: opacity 0.3s ease;
+      }
+      #ui-overlay.inactive {
+        border-top: 4px solid #bdc3c7;
+        opacity: 0.8;
+      }
+      #ui-overlay h1 {
+        margin: 0 0 8px 0;
+        font-size: 16px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        color: #1a1a1a;
+      }
+      #ui-overlay p {
+        margin: 4px 0;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      #ui-overlay .directive-text {
+        color: #7f8c8d;
+        font-style: italic;
+      }
+      #ui-overlay #ui-current-model {
+        margin-top: 8px;
+        font-weight: 600;
+        color: #d32f2f;
+        background: #ffebee;
+        padding: 4px 8px;
+        border-radius: 4px;
+        display: inline-block;
+      }
+    </style>
+
+    <!-- Essential Importmap now pointing to LOCAL vendor dependency mapping -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/three/build/three.module.js",
+          "three/addons/loaders/LDrawLoader.js": "/LDrawLoader.js",
+          "three/addons/": "/three/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+
+  <body>
+    <!-- Abstract Status Interface leveraging custom vector branding -->
+    <div id="ui-overlay" class="inactive">
+      <h1 id="ui-title">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20" style="display: inline-block; vertical-align: text-bottom; margin-right: 8px; color: #f44336;">
+          <path d="M5 5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h6V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2h1z" />
+        </svg>
+        <span id="ui-title-text">No Active Model</span>
+      </h1>
+      <p class="directive-text">Waiting for directives via API...</p>
+      <p id="ui-current-model" style="display: none;"></p>
+    </div>
+
+    <div id="loading">Scanning catalog...</div>
+
+    <div id="controls" style="display: none">
+      <div class="control-group">
+        <label for="modelSelect">Model Selection</label>
+        <select id="modelSelect"></select>
+      </div>
+
+      <div class="control-group" id="stepContainer">
+        <label id="stepLabel" for="stepSlider">Building Step: 0</label>
+        <input type="range" id="stepSlider" min="0" value="0" />
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="flatColors" />
+        <label for="flatColors">Flat Colors</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="smoothNormals" checked />
+        <label for="smoothNormals">Smooth Normals</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="displayLines" checked />
+        <label for="displayLines">Display Lines</label>
+      </div>
+      <div class="check-row">
+        <input type="checkbox" id="conditionalLines" checked />
+        <label for="conditionalLines">Conditional Lines</label>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+      import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
+      import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
+
+      let camera, scene, renderer, controls, model;
+      let currentLoadId = 0; // Added race condition protection
+
+      const loadingEl = document.getElementById("loading");
+      const controlsEl = document.getElementById("controls");
+      
+      // Specialized dynamic HUD references
+      const uiOverlayEl = document.getElementById("ui-overlay");
+      const uiTitleEl = document.getElementById("ui-title-text");
+      const uiModelEl = document.getElementById("ui-current-model");
+
+      // Model catalog sourced dynamically from REST API
+      let catalog = [];
+
+      // Application state driven initially by URLSearchParams
+      const state = {
+        modelId: "",
+        buildingStep: 0,
+        flatColors: false,
+        smoothNormals: true,
+        displayLines: true,
+        conditionalLines: true,
+      };
+
+      initApp();
+
+      async function initApp() {
+        try {
+          // 1. Setup 3D Stage
+          scene = new THREE.Scene();
+          scene.background = new THREE.Color(0xdeebed);
+
+          renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            outputColorSpace: THREE.SRGBColorSpace,
+          });
+          renderer.setPixelRatio(window.devicePixelRatio);
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          document.body.appendChild(renderer.domElement);
+
+          const pmremGen = new THREE.PMREMGenerator(renderer);
+          scene.environment = pmremGen.fromScene(
+            new RoomEnvironment(),
+            0.04,
+          ).texture;
+
+          camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            1,
+            10000,
+          );
+          camera.position.set(150, 200, 250);
+
+          controls = new OrbitControls(camera, renderer.domElement);
+          controls.enableDamping = true;
+
+          window.addEventListener("resize", onResize);
+
+          // 2. Fetch Catalog from REST API
+          const res = await fetch("/lego/v1/models");
+          catalog = await res.json();
+
+          if (!catalog || catalog.length === 0)
+            throw new Error("Empty catalog");
+
+          // 3. Transition to Event-Driven listener (Remote Controlled)
+          animate();
+
+          const evtSource = new EventSource("/lego/v1/stream");
+
+          evtSource.onmessage = (event) => {
+            const serverState = JSON.parse(event.data);
+            console.log("Received live state push:", serverState);
+
+            // Trigger high priority dynamic status update hook
+            updateUIHeader(serverState);
+
+            const needsReload =
+              state.modelId !== serverState.modelId ||
+              state.flatColors !== serverState.flatColors ||
+              state.smoothNormals !== serverState.smoothNormals;
+
+            const modelSwitched = state.modelId !== serverState.modelId;
+
+            // Apply persistent local copy
+            Object.assign(state, serverState);
+
+            if (needsReload) {
+              loadCurrentModel(modelSwitched);
+            } else {
+              updateVisibility();
+              loadingEl.style.display = "none"; // FIX: Clears overlay on reconnection reloads
+            }
+          };
+
+          evtSource.onerror = () => {
+            loadingEl.innerText = "Disconnected from stream. Reconnecting...";
+            loadingEl.style.display = "block";
+          };
+        } catch (e) {
+          loadingEl.innerText = "Load Failure: " + e.message;
+        }
+      }
+
+      // Legacy GUI functions decommissioned following full REST-authoritative migration
+
+      // Explicit helper to recycle objects and avoid total WebGL memory exhaust
+      function cleanObject(obj) {
+        if (!obj) return;
+        obj.traverse((c) => {
+          if (c.geometry) c.geometry.dispose();
+          if (c.material) {
+            const mats = Array.isArray(c.material) ? c.material : [c.material];
+            mats.forEach((m) => {
+              if (m && typeof m.dispose === "function") m.dispose();
+            });
+          }
+        });
+      }
+
+      function loadCurrentModel(resetCam) {
+        const loadId = ++currentLoadId; // Increment track to ignore older concurrent fetches
+
+        if (model) {
+          scene.remove(model);
+          cleanObject(model); // Crucial memory cleanup fix
+        }
+        model = null;
+
+        const metadata = catalog.find((m) => m.id === state.modelId);
+        if (!metadata) {
+          loadingEl.style.display = "none"; // FIX: Clear any persistent spinner on deletion unmount
+          return;
+        }
+
+        loadingEl.style.display = "block";
+        loadingEl.innerText = "Loading Model File...";
+
+        const loader = new LDrawLoader();
+        loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
+        // Disable smoothing if requested or utilizing flat coloring per original sample optimization
+        loader.smoothNormals = state.smoothNormals && !state.flatColors;
+
+        // Explicitly use absolute root context path for API proxy loading
+        loader.setPath("");
+
+        loader.load(
+          `/lego/v1/models/${state.modelId}/file`,
+          (grp) => {
+            // Prevent race condition stacking
+            if (loadId !== currentLoadId) {
+              cleanObject(grp);
+              return;
+            }
+
+            model = grp;
+
+            // Apply Flat Materials replacement if enabled
+            if (state.flatColors) {
+              model.traverse((c) => {
+                if (c.isMesh) {
+                  const convert = (mat) => {
+                    const basic = new THREE.MeshBasicMaterial();
+                    basic.color.copy(mat.color);
+                    basic.opacity = mat.opacity;
+                    basic.transparent = mat.transparent;
+                    basic.depthWrite = mat.depthWrite;
+                    basic.toneMapped = false;
+                    
+                    // Explicitly release superseded memory to prevent GPU resource exhaustion
+                    if (typeof mat.dispose === "function") mat.dispose();
+                    
+                    return basic;
+                  };
+                  c.material = Array.isArray(c.material)
+                    ? c.material.map(convert)
+                    : convert(c.material);
+                }
+              });
+            }
+
+            // Mirror standard coordinates
+            model.rotation.x = Math.PI;
+            scene.add(model);
+
+            updateVisibility();
+
+            if (resetCam) {
+              const box = new THREE.Box3().setFromObject(model);
+              const center = box.getCenter(new THREE.Vector3());
+              const size = box.getSize(new THREE.Vector3());
+              const maxDim = Math.max(size.x, size.y, size.z);
+
+              controls.target.copy(center);
+              camera.position.set(
+                center.x - maxDim,
+                center.y + maxDim * 0.7,
+                center.z + maxDim,
+              );
+              controls.update();
+            }
+
+            loadingEl.style.display = "none";
+          },
+          (xhr) => {
+            // Ignore progress notifications from canceled concurrent requests
+            if (loadId !== currentLoadId) return; 
+            
+            if (xhr.lengthComputable) {
+              loadingEl.innerText = `Loading: ${Math.round((xhr.loaded / xhr.total) * 100)}%`;
+            }
+          },
+          (err) => {
+             // Ignore errors belonging to superseded loads
+            if (loadId !== currentLoadId) return; 
+            
+            loadingEl.innerText = "Error loading model";
+          },
+        );
+      }
+
+      function updateUIHeader(serverState) {
+        if (!uiOverlayEl || !uiTitleEl || !uiModelEl) return;
+
+        if (serverState && serverState.modelId && serverState.modelId !== "") {
+          // Resolve proper human-readable name from global catalog
+          const metadata = catalog.find((m) => m.id === serverState.modelId);
+          const resolvedName = metadata ? metadata.name : serverState.modelId;
+
+          uiTitleEl.textContent = "Model Active";
+          uiModelEl.textContent = `Current Model: ${resolvedName}`;
+          uiModelEl.style.display = "inline-block";
+          uiOverlayEl.classList.remove("inactive");
+        } else {
+          // Handle "DELETE" empty state or baseline reset
+          uiTitleEl.textContent = "No Active Model";
+          uiModelEl.style.display = "none";
+          uiModelEl.textContent = "";
+          uiOverlayEl.classList.add("inactive");
+        }
+      }
+
+      function updateVisibility() {
+        if (!model) return;
+        model.traverse((c) => {
+          if (c.isLineSegments) {
+            c.visible = c.isConditionalLine
+              ? state.conditionalLines
+              : state.displayLines;
+          } else if (c.isGroup && c.userData.buildingStep !== undefined) {
+            // FIXED: only enforce step condition if buildingStep property is present
+            c.visible = c.userData.buildingStep <= state.buildingStep;
+          }
+        });
+      }
+
+      function onResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+    </script>
+  </body>
+</html>

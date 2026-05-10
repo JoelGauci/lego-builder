@@ -1,0 +1,171 @@
+openapi: 3.0.3
+info:
+  title: Lego Builder Viewer API
+  description: REST control interface enabling model discovery and control integration for the Three.js LDraw visualizer.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/lego/v1
+    description: Local development and staging base API context
+
+paths:
+  /models:
+    get:
+      summary: Get catalog of supported Lego models
+      responses:
+        "200":
+          description: Successful enumeration of available inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModelMetadata"
+
+  /models/{id}:
+    get:
+      summary: Query specific model detail metrics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifier slug for the model (e.g., 'car')
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Returns precise model configuration options
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelMetadata"
+        "404":
+          description: Requested model id not in inventory registry
+  /models/{id}/file:
+    get:
+      summary: Access abstract asset stream
+      description: Reroute binary payloads securely, decoupled from physical storage locations.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Primary identifier for file matching
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Virtual file streaming initialized successfully
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Model definition broken or binary missing from pool.
+
+  /models/{id}/display:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Activate model rendering
+      description: Replaces current global viewport content with this model resource. Initial step defaults to maximum unless overridden.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewerState"
+      responses:
+        "200":
+          description: View context established successfully
+    get:
+      summary: Query active display configuration
+      description: Retrieves current rendering properties if this model is currently visible.
+      responses:
+        "200":
+          description: State active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerState"
+        "404":
+          description: Model is not currently active on the viewport
+    patch:
+      summary: Mutate active view configuration
+      description: Partially modify buildingStep, flatColors, smoothNormals, etc. for the active model.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewerState"
+      responses:
+        "200":
+          description: Mutation dispatched successfully
+        "400":
+          description: Validation failed. Invalid value provided for numerical buildingStep.
+        "409":
+          description: State conflict. Target model identity is not the active context. Issue a POST first to activate.
+    delete:
+      summary: Deactivate active model display
+      description: Reset screen to clear state or default baseline model.
+      responses:
+        "200":
+          description: Display successfully cleared
+
+  /stream:
+    get:
+      summary: Subscribe to global event pushed stream
+      responses:
+        "200":
+          description: Establishes HTTP persistent connection flushing runtime state changes.
+
+  /healthz:
+    get:
+      summary: Standard platform lifecycle health probe
+      responses:
+        "200":
+          description: Service is Operational
+
+components:
+  schemas:
+    ModelMetadata:
+      type: object
+      required:
+        - id
+        - name
+        - numBuildingSteps
+      properties:
+        id:
+          type: string
+          example: "car"
+        name:
+          type: string
+          example: "Car"
+        numBuildingSteps:
+          type: integer
+          example: 8
+        hasBuildingSteps:
+          type: boolean
+          example: true
+
+    ViewerState:
+      type: object
+      properties:
+        modelId:
+          type: string
+          readOnly: true
+        buildingStep:
+          type: integer
+          example: 5
+        flatColors:
+          type: boolean
+        smoothNormals:
+          type: boolean
+        displayLines:
+          type: boolean
+        conditionalLines:
+          type: boolean

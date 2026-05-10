@@ -1,0 +1,11 @@
+# Ignorer les modules locaux pour forcer npm ci dans le conteneur
+node_modules
+npm-debug.log
+
+# Ignorer les fichiers annexes non nécessaires au runtime
+Dockerfile
+.dockerignore
+.git
+.gitignore
+openapi.yaml
+test_*.js
