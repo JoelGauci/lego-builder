@@ -156,6 +156,7 @@ let globalViewerState = {
   smoothNormals: true,
   displayLines: true,
   conditionalLines: true,
+  currentUser: "none",
 };
 
 // 2. Registry for active web UI streaming listeners
@@ -250,6 +251,7 @@ app.post("/lego/v1/models/:id/display", (req, res) => {
     },
   );
 
+  globalViewerState.currentUser = req.get("X-User") || "none";
   broadcastViewerState();
   res.json({
     message: `Model ${modelId} activated on screen`,
@@ -314,6 +316,7 @@ app.patch("/lego/v1/models/:id/display", (req, res) => {
 
   // Commit and dispatch
   globalViewerState = { ...globalViewerState, ...sanitizedUpdate };
+  globalViewerState.currentUser = req.get("X-User") || "none";
   broadcastViewerState();
 
   res.json({ status: "ConfigurationMutated", state: globalViewerState });
@@ -327,6 +330,7 @@ app.delete("/lego/v1/models/:id/display", (req, res) => {
   if (globalViewerState.modelId === req.params.id) {
     // Setting null triggers front-end geometry cleanObject destruction implicitly
     globalViewerState.modelId = "";
+    globalViewerState.currentUser = "none";
     broadcastViewerState();
   }
   res.json({ message: "Visual Context cleared." });

@@ -109,6 +109,16 @@
         border-radius: 4px;
         display: inline-block;
       }
+      #ui-overlay #ui-current-user {
+        margin-top: 8px;
+        margin-left: 8px;
+        font-weight: 600;
+        color: #2e7d32;
+        background: #e8f5e9;
+        padding: 4px 8px;
+        border-radius: 4px;
+        display: inline-block;
+      }
     </style>
 
     <!-- Essential Importmap now pointing to LOCAL vendor dependency mapping -->
@@ -134,6 +144,7 @@
       </h1>
       <p class="directive-text">Waiting for directives via API...</p>
       <p id="ui-current-model" style="display: none;"></p>
+      <p id="ui-current-user" style="display: none;"></p>
     </div>
 
     <div id="loading">Scanning catalog...</div>
@@ -184,6 +195,7 @@
       const uiOverlayEl = document.getElementById("ui-overlay");
       const uiTitleEl = document.getElementById("ui-title-text");
       const uiModelEl = document.getElementById("ui-current-model");
+      const uiUserEl = document.getElementById("ui-current-user");
 
       // Model catalog sourced dynamically from REST API
       let catalog = [];
@@ -398,7 +410,7 @@
       }
 
       function updateUIHeader(serverState) {
-        if (!uiOverlayEl || !uiTitleEl || !uiModelEl) return;
+        if (!uiOverlayEl || !uiTitleEl || !uiModelEl || !uiUserEl) return;
 
         if (serverState && serverState.modelId && serverState.modelId !== "") {
           // Resolve proper human-readable name from global catalog
@@ -408,12 +420,21 @@
           uiTitleEl.textContent = "Model Active";
           uiModelEl.textContent = `Current Model: ${resolvedName}`;
           uiModelEl.style.display = "inline-block";
+          
+          const userName = serverState.currentUser || "none";
+          uiUserEl.textContent = `Current User: ${userName}`;
+          uiUserEl.style.display = "inline-block";
+
           uiOverlayEl.classList.remove("inactive");
         } else {
           // Handle "DELETE" empty state or baseline reset
           uiTitleEl.textContent = "No Active Model";
           uiModelEl.style.display = "none";
           uiModelEl.textContent = "";
+          
+          uiUserEl.style.display = "none";
+          uiUserEl.textContent = "";
+
           uiOverlayEl.classList.add("inactive");
         }
       }

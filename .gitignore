@@ -2,3 +2,5 @@ node_modules/
 *.log
 diff_output.txt
 npm-debug.log
+server.pid
+verify_syntax.js
