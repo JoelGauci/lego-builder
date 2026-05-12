@@ -145,6 +145,7 @@
       <p class="directive-text">Waiting for directives via API...</p>
       <p id="ui-current-model" style="display: none;"></p>
       <p id="ui-current-user" style="display: none;"></p>
+      <button id="ui-clear-btn" style="display: none; background-color: #FBBC05; color: black; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-top: 8px; font-weight: bold; pointer-events: auto;">Clear</button>
     </div>
 
     <div id="loading">Scanning catalog...</div>
@@ -426,9 +427,13 @@
           uiUserEl.style.display = "inline-block";
 
           uiOverlayEl.classList.remove("inactive");
+          const clearBtn = document.getElementById("ui-clear-btn");
+          if (clearBtn) clearBtn.style.display = "inline-block";
         } else {
           // Handle "DELETE" empty state or baseline reset
           uiTitleEl.textContent = "No Active Model";
+          const clearBtn = document.getElementById("ui-clear-btn");
+          if (clearBtn) clearBtn.style.display = "none";
           uiModelEl.style.display = "none";
           uiModelEl.textContent = "";
           
@@ -463,6 +468,23 @@
         requestAnimationFrame(animate);
         controls.update();
         renderer.render(scene, camera);
+      }
+
+      // Clear button listener
+      const clearBtn = document.getElementById("ui-clear-btn");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", async () => {
+          try {
+            await fetch("/lego/v1/models/apigee/display", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              }
+            });
+          } catch (err) {
+            console.error("Failed to clear model:", err);
+          }
+        });
       }
     </script>
   </body>
